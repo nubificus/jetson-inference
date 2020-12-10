@@ -20,7 +20,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: install Requirements
-      run: sudo apt-get update && sudo apt-get install cmake build-essential git pkg-config
+      run: sudo apt-get update && sudo apt-get install -y cmake build-essential git pkg-config
  
  
     - name: Create Build Environment
