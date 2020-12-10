@@ -47,7 +47,7 @@ jobs:
       # Execute the build.  You can specify a specific target with "--target <NAME>"
       run: make
 
-      - name: Build no 3
+    - name: Build no 3
       working-directory: ${{runner.workspace}}/build
       shell: bash
       # Execute the build.  You can specify a specific target with "--target <NAME>"
