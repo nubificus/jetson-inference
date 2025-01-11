@@ -740,7 +740,9 @@ bool tensorNet::ProfileModel(const std::string& deployFile,			   // name for caf
 			nvinfer1::Dims dims = network->getInput(i)->getDimensions();
 
 		#if NV_TENSORRT_MAJOR >= 7
+		#if NV_TENSORRT_MAJOR < 10
 			if( mModelType == MODEL_ONNX )
+		#endif
 				dims = shiftDims(dims);  // change NCHW to CHW for EXPLICIT_BATCH
 		#endif
 
@@ -1558,15 +1560,16 @@ bool tensorNet::LoadEngine( nvinfer1::ICudaEngine* engine,
             inputDims.d[m] = engine->getTensorBytesPerComponent(bind_name);*/
             
 	#if NV_TENSORRT_MAJOR > 1
-    #if NV_TENSORRT_MAJOR >= 10
-        //mContext->setInputShape(input_blobs[n].c_str(), nvinfer1::Dims4{1, 3, 224, 224});
-        nvinfer1::Dims inputDims = engine->getTensorShape(input_blobs[n].c_str());
-    #else  
+	#if NV_TENSORRT_MAJOR >= 10
+		//mContext->setInputShape(input_blobs[n].c_str(), nvinfer1::Dims4{1, 3, 224, 224});
+		nvinfer1::Dims inputDims = shiftDims(engine->getTensorShape(input_blobs[n].c_str()));
+	#else  
 		nvinfer1::Dims inputDims = validateDims(engine->getBindingDimensions(inputIndex));
-    #endif
+
 	#if NV_TENSORRT_MAJOR >= 7
 	    if( mModelType == MODEL_ONNX )
 		   inputDims = shiftDims(inputDims);   // change NCHW to CHW if EXPLICIT_BATCH set
+	#endif
 	#endif
 	#else
 		Dims3 inputDims = engine->getBindingDimensions(inputIndex);
@@ -1595,8 +1598,8 @@ bool tensorNet::LoadEngine( nvinfer1::ICudaEngine* engine,
 		}
 	#endif
 	
-    #if 0 && NV_TENSORRT_MAJOR >= 10
-        if( !mContext->setInputTensorAddress(input_blobs[n].c_str(), inputCUDA) )
+    #if NV_TENSORRT_MAJOR >= 10
+        if( !context->setInputTensorAddress(input_blobs[n].c_str(), inputCUDA) )
         {
             LogError(LOG_TRT "failed to set input tensor address for %s (%zu bytes)\n", inputSize, input_blobs[n].c_str());
 			return false;
@@ -1637,14 +1640,16 @@ bool tensorNet::LoadEngine( nvinfer1::ICudaEngine* engine,
 
 		LogVerbose(LOG_TRT "binding to output %i %s  binding index:  %i\n", n, output_blobs[n].c_str(), outputIndex);
 
-    #if NV_TENSORRT_MAJOR >= 10
-        nvinfer1::Dims outputDims = engine->getTensorShape(output_blobs[n].c_str());
-	#elif NV_TENSORRT_MAJOR > 1
+	#if NV_TENSORRT_MAJOR > 1
+	#if NV_TENSORRT_MAJOR >= 10
+        	nvinfer1::Dims outputDims = shiftDims(engine->getTensorShape(output_blobs[n].c_str()));
+	#else
 		nvinfer1::Dims outputDims = validateDims(engine->getBindingDimensions(outputIndex));
 
 	#if NV_TENSORRT_MAJOR >= 7
 		if( mModelType == MODEL_ONNX )
 			outputDims = shiftDims(outputDims);  // change NCHW to CHW if EXPLICIT_BATCH set
+	#endif
 	#endif
 	#else
 		Dims3 outputDims = engine->getBindingDimensions(outputIndex);
@@ -1665,9 +1670,9 @@ bool tensorNet::LoadEngine( nvinfer1::ICudaEngine* engine,
 		}
 	
     #if NV_TENSORRT_MAJOR >= 10
-        if( !mContext->setTensorAddress(output_blobs[n].c_str(), outputCUDA) )
+        if( !context->setTensorAddress(output_blobs[n].c_str(), outputCUDA) )
         {
-            LogError(LOG_TRT "failed to set input tensor address for %s (%zu bytes)\n", outputSize, output_blobs[n].c_str());
+            LogError(LOG_TRT "failed to set output tensor address for %s (%zu bytes)\n", outputSize, output_blobs[n].c_str());
 			return false;
         }  
     #endif
@@ -1865,7 +1870,7 @@ void tensorNet::SetStream( cudaStream_t stream )
 // ProcessNetwork
 bool tensorNet::ProcessNetwork( bool sync )
 {
-	if( TENSORRT_VERSION_CHECK(8,4,1) && mModelType == MODEL_ONNX )
+	if( TENSORRT_VERSION_CHECK(8,4,1))
 	{
 	#if TENSORRT_VERSION_CHECK(8,4,1)
 		// on TensorRT 8.4.1 (JetPack 5.0.2 / L4T R35.1.0) and newer, this warning appears:
