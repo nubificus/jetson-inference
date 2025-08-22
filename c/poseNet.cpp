@@ -125,10 +125,10 @@ bool poseNet::init( const char* model, const char* topology_path, const char* co
 		LogError(LOG_TRT "poseNet -- failed to load keypoint colors, using defaults...\n");
 	}
 	
-	// assert this is an ONNX model
-	if( modelTypeFromPath(model) != MODEL_ONNX )
+	// assert this is not a CAFFE/UFF model
+	if( IsModelType(MODEL_CAFFE) || IsModelType(MODEL_UFF) )
 	{
-		LogError(LOG_TRT "poseNet -- only ONNX models are supported.\n");
+		LogError(LOG_TRT "poseNet -- invalid model type (UFF/CAFFE models not supported)\n");
 		return false;
 	}
 	
@@ -476,23 +476,16 @@ bool poseNet::Process( void* input, uint32_t width, uint32_t height, imageFormat
 
 	PROFILER_BEGIN(PROFILER_PREPROCESS);
 
-	if( IsModelType(MODEL_ONNX) )
+	// downsample, convert to band-sequential RGB, and apply pixel normalization, mean pixel subtraction and standard deviation
+	LogInfo(LOG_TRT "poseNet::Process() -- downsampling, converting to band-sequential RGB, and applying pixel normalization, mean pixel subtraction and standard deviation\n");
+	if( CUDA_FAILED(cudaTensorNormMeanRGB(input, format, width, height,
+								   mInputs[0].CUDA, GetInputWidth(), GetInputHeight(), 
+								   make_float2(0.0f, 1.0f), 
+								   make_float3(0.485f, 0.456f, 0.406f),
+								   make_float3(0.229f, 0.224f, 0.225f),  
+								   GetStream())) )
 	{
-		// downsample, convert to band-sequential RGB, and apply pixel normalization, mean pixel subtraction and standard deviation
-		if( CUDA_FAILED(cudaTensorNormMeanRGB(input, format, width, height,
-									   mInputs[0].CUDA, GetInputWidth(), GetInputHeight(), 
-									   make_float2(0.0f, 1.0f), 
-									   make_float3(0.485f, 0.456f, 0.406f),
-									   make_float3(0.229f, 0.224f, 0.225f),  
-									   GetStream())) )
-		{
-			LogError(LOG_TRT "poseNet::Process() -- cudaTensorNormMeanRGB() failed\n");
-			return false;
-		}
-	}
-	else
-	{
-		LogError(LOG_TRT "poseNet::Process() -- invalid model type (should be ONNX)\n");
+		LogError(LOG_TRT "poseNet::Process() -- cudaTensorNormMeanRGB() failed\n");
 		return false;
 	}
 	

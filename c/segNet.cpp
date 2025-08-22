@@ -519,9 +519,22 @@ bool segNet::Process( void* image, uint32_t width, uint32_t height, imageFormat 
 
 	PROFILER_BEGIN(PROFILER_PREPROCESS);
 
-	if( IsModelType(MODEL_ONNX) )
+	if( IsModelType(MODEL_UFF) || IsModelType(MODEL_CAFFE) )
+	{
+		// downsample and convert to band-sequential BGR
+		LogInfo(LOG_TRT "segNet::Process() -- downsampling and converting to band-sequential BGR");
+		if( CUDA_FAILED(cudaTensorMeanBGR(image, format, width, height, 
+								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
+								    make_float3(0,0,0), GetStream())) )
+		{
+			LogError(LOG_TRT "segNet::Process() -- cudaTensorMeanBGR() failed\n");
+			return false;
+		}
+	}
+	else
 	{
 		// downsample, convert to band-sequential RGB, and apply pixel normalization, mean pixel subtraction and standard deviation
+		LogInfo(LOG_TRT "segNet::Process() -- downsampling, converting to band-sequential RGB, and applying pixel normalization, mean pixel subtraction and standard deviation");
 		if( CUDA_FAILED(cudaTensorNormMeanRGB(image, format, width, height,
 									   mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
 									   make_float2(0.0f, 1.0f), 
@@ -530,17 +543,6 @@ bool segNet::Process( void* image, uint32_t width, uint32_t height, imageFormat 
 									   GetStream())) )
 		{
 			LogError(LOG_TRT "segNet::Process() -- cudaTensorNormMeanRGB() failed\n");
-			return false;
-		}
-	}
-	else
-	{
-		// downsample and convert to band-sequential BGR
-		if( CUDA_FAILED(cudaTensorMeanBGR(image, format, width, height, 
-								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
-								    make_float3(0,0,0), GetStream())) )
-		{
-			LogError(LOG_TRT "segNet::Process() -- cudaTensorMeanBGR() failed\n");
 			return false;
 		}
 	}

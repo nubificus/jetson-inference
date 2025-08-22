@@ -33,6 +33,7 @@
 #include "filesystem.h"
 #include "logging.h"
 
+#include <string>
 
 #define OUTPUT_CVG  0	// Caffe has output coverage (confidence) heat map
 #define OUTPUT_BBOX 1	// Caffe has separate output layer for bounding box
@@ -404,7 +405,7 @@ bool detectNet::allocDetections()
 		LogInfo(LOG_TRT "W = %u  H = %u  C = %u\n", DIMS_W(mOutputs[OUTPUT_UFF].dims), DIMS_H(mOutputs[OUTPUT_UFF].dims), DIMS_C(mOutputs[OUTPUT_UFF].dims));
 		mMaxDetections = DIMS_H(mOutputs[OUTPUT_UFF].dims) * DIMS_C(mOutputs[OUTPUT_UFF].dims);
 	}
-	else if( IsModelType(MODEL_ONNX) )
+	else if( mModelFile.find("ssd") != std::string::npos || mModelFile.find("SSD") != std::string::npos )
 	{
 		mNumClasses = DIMS_H(mOutputs[OUTPUT_CONF].dims);
 		mMaxDetections = DIMS_C(mOutputs[OUTPUT_CONF].dims) /** mNumClasses*/;
@@ -554,7 +555,19 @@ bool detectNet::preProcess( void* input, uint32_t width, uint32_t height, imageF
 			return false;
 		}
 	}
-	else if( IsModelType(MODEL_ONNX) )
+	else if( IsModelType(MODEL_CAFFE) )
+	{
+		// DetectNet (Caffe)
+		if( CUDA_FAILED(cudaTensorMeanBGR(input, format, width, height,
+								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
+								    make_float3(mMeanPixel, mMeanPixel, mMeanPixel), 
+								    GetStream())) )
+		{
+			LogError(LOG_TRT "detectNet::Detect() -- cudaTensorMeanBGR() failed\n");
+			return false;
+		}
+	}
+	else if( mModelFile.find("ssd") != std::string::npos || mModelFile.find("SSD") != std::string::npos )
 	{
 		// SSD (PyTorch / ONNX)
 		if( CUDA_FAILED(cudaTensorNormMeanRGB(input, format, width, height,
@@ -568,19 +581,7 @@ bool detectNet::preProcess( void* input, uint32_t width, uint32_t height, imageF
 			return false;
 		}
 	}
-	else if( IsModelType(MODEL_CAFFE) )
-	{
-		// DetectNet (Caffe)
-		if( CUDA_FAILED(cudaTensorMeanBGR(input, format, width, height,
-								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
-								    make_float3(mMeanPixel, mMeanPixel, mMeanPixel), 
-								    GetStream())) )
-		{
-			LogError(LOG_TRT "detectNet::Detect() -- cudaTensorMeanBGR() failed\n");
-			return false;
-		}
-	}
-	else if( IsModelType(MODEL_ENGINE) )
+	else
 	{
 		// https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/peoplenet
 		if( CUDA_FAILED(cudaTensorNormRGB(input, format, width, height,
@@ -608,14 +609,12 @@ int detectNet::postProcess( void* input, uint32_t width, uint32_t height, imageF
 
 	if( IsModelType(MODEL_UFF) )	
 		numDetections = postProcessSSD_UFF(detections, width, height);
-	else if( IsModelType(MODEL_ONNX) )
-		numDetections = postProcessSSD_ONNX(detections, width, height);
 	else if( IsModelType(MODEL_CAFFE) )
 		numDetections = postProcessDetectNet(detections, width, height);
-	else if( IsModelType(MODEL_ENGINE) )
-		numDetections = postProcessDetectNet_v2(detections, width, height);
+	else if( mModelFile.find("ssd") != std::string::npos || mModelFile.find("SSD") != std::string::npos )
+		numDetections = postProcessSSD_ONNX(detections, width, height);
 	else
-		return -1;
+		numDetections = postProcessDetectNet_v2(detections, width, height);
 
 	// sort the detections by area
 	sortDetections(detections, numDetections);

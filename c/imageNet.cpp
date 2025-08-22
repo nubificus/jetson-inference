@@ -34,7 +34,6 @@
 #include <algorithm>
 
 
-
 // constructor
 imageNet::imageNet() : tensorNet()
 {
@@ -253,6 +252,7 @@ bool imageNet::preProcess( void* image, uint32_t width, uint32_t height, imageFo
 	if( mModelFile == "Inception-v4.caffemodel" )
 	{
 		// downsample, convert to band-sequential RGB, and apply pixel normalization
+		LogInfo(LOG_TRT "imageNet::preProcess() -- downsampling, converting to band-sequential RGB, and applying pixel normalization\n");
 		if( CUDA_FAILED(cudaTensorNormRGB(image, format, width, height,
 								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(), 
 								    make_float2(-1.0f, 1.0f), 
@@ -262,9 +262,23 @@ bool imageNet::preProcess( void* image, uint32_t width, uint32_t height, imageFo
 			return false;
 		}
 	}
-	else if( IsModelType(MODEL_ONNX) )
+	else if( IsModelType(MODEL_CAFFE) )
+	{
+		// downsample, convert to band-sequential BGR, and apply mean pixel subtraction 
+		LogInfo(LOG_TRT "imageNet::preProcess() -- downsampling, converting to band-sequential BGR, and applying mean pixel subtraction\n");
+		if( CUDA_FAILED(cudaTensorMeanBGR(image, format, width, height, 
+								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
+								    make_float3(104.0069879317889f, 116.66876761696767f, 122.6789143406786f),
+								    GetStream())) )
+		{
+			LogError(LOG_TRT "imageNet::PreProcess() -- cudaTensorMeanBGR() failed\n");
+			return false;
+		}
+	}
+	else
 	{
 		// downsample, convert to band-sequential RGB, and apply pixel normalization, mean pixel subtraction and standard deviation
+		LogInfo(LOG_TRT "imageNet::preProcess() -- downsampling, converting to band-sequential RGB, and applying pixel normalization, mean pixel subtraction and standard deviation\n");
 		if( CUDA_FAILED(cudaTensorNormMeanRGB(image, format, width, height, 
 									   mInputs[0].CUDA, GetInputWidth(), GetInputHeight(), 
 									   make_float2(0.0f, 1.0f), 
@@ -273,18 +287,6 @@ bool imageNet::preProcess( void* image, uint32_t width, uint32_t height, imageFo
 									   GetStream())) )
 		{
 			LogError(LOG_TRT "imageNet::PreProcess() -- cudaTensorNormMeanRGB() failed\n");
-			return false;
-		}
-	}
-	else
-	{
-		// downsample, convert to band-sequential BGR, and apply mean pixel subtraction 
-		if( CUDA_FAILED(cudaTensorMeanBGR(image, format, width, height, 
-								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
-								    make_float3(104.0069879317889f, 116.66876761696767f, 122.6789143406786f),
-								    GetStream())) )
-		{
-			LogError(LOG_TRT "imageNet::PreProcess() -- cudaTensorMeanBGR() failed\n");
 			return false;
 		}
 	}

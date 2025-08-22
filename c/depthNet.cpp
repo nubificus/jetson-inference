@@ -324,23 +324,10 @@ bool depthNet::Process( void* input, uint32_t input_width, uint32_t input_height
 	
 	PROFILER_BEGIN(PROFILER_PREPROCESS);
 
-	if( IsModelType(MODEL_ONNX) )
-	{
-		// remap from [0,255] -> [0,1], no mean pixel subtraction or std dev applied
-		if( CUDA_FAILED(cudaTensorNormMeanRGB(input, input_format, input_width, input_height, 
-									   mInputs[0].CUDA, GetInputWidth(), GetInputHeight(), 
-									   make_float2(0.0f, 1.0f), 
-									   make_float3(0.0f, 0.0f, 0.0f),
-									   make_float3(1.0f, 1.0f, 1.0f), 
-									   GetStream())) )
-		{
-			printf(LOG_TRT "depthNet::Process() -- cudaPreImageNetNormMeanRGB() failed\n");
-			return false;
-		}
-	}
-	else if( IsModelType(MODEL_UFF) )
+	if( IsModelType(MODEL_UFF) )
 	{
 		// remap to planar BGR, apply mean pixel subtraction
+		LogInfo(LOG_TRT "depthNet::Process() -- remapping to planar BGR and applying mean pixel subtraction\n");
 		if( CUDA_FAILED(cudaTensorMeanBGR(input, input_format, input_width, input_height,
 								    mInputs[0].CUDA, GetInputWidth(), GetInputHeight(),
 								    make_float3(123.0, 115.0, 101.0),
@@ -352,8 +339,18 @@ bool depthNet::Process( void* input, uint32_t input_width, uint32_t input_height
 	}
 	else
 	{
-		printf(LOG_TRT "depthNet::Process() -- support for models other than ONNX and UFF not implemented.\n");
-		return false;
+		// remap from [0,255] -> [0,1], no mean pixel subtraction or std dev applied
+		LogInfo(LOG_TRT "depthNet::Process() -- remapping from [0,255] to [0,1]\n");
+		if( CUDA_FAILED(cudaTensorNormMeanRGB(input, input_format, input_width, input_height, 
+									   mInputs[0].CUDA, GetInputWidth(), GetInputHeight(), 
+									   make_float2(0.0f, 1.0f), 
+									   make_float3(0.0f, 0.0f, 0.0f),
+									   make_float3(1.0f, 1.0f, 1.0f), 
+									   GetStream())) )
+		{
+			printf(LOG_TRT "depthNet::Process() -- cudaPreImageNetNormMeanRGB() failed\n");
+			return false;
+		}
 	}
 
 	PROFILER_END(PROFILER_PREPROCESS);
